@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Анонимные репорты</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+        textarea { width: 300px; height: 100px; }
+        button { margin-top: 10px; padding: 10px; }
+        select { margin: 10px; padding: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Отправить анонимный репорт</h1>
+    <form method="POST">
+        <textarea name="report" placeholder="Введите ваш репорт..." required></textarea><br>
+        <select name="category" required>
+            <option value="">Выберите категорию</option>
+            <option value="admin">Жалоба на админа</option>
+            <option value="user">Жалоба на участника</option>
+        </select><br>
+        <button type="submit">Отправить</button>
+    </form>
+</body>
+</html>
