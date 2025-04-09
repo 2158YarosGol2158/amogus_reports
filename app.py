@@ -120,7 +120,7 @@ async def process_description(message: types.Message, state: FSMContext):
     
     buttons = [[KeyboardButton(text="Пропустить")]]
     keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
-    await message.answer("Отправьте доказательства (скриншот, видео или текст) или нажмите 'Пропустить':", 
+    await message.answer("Отправьте доказательства (текст или ссылка на сообщение) или нажмите 'Пропустить':", 
                          reply_markup=keyboard)
     await state.set_state(ReportStates.waiting_for_proof)
 
@@ -285,7 +285,7 @@ async def submit_report(request):
 # Обработка нажатия на кнопку "Просмотреть сайт репортов"
 @dp.message(lambda message: message.text == "Просмотреть сайт репортов")
 async def view_reports_site(message: types.Message):
-    await message.answer("Вы можете посетить сайт репортов по ссылке: http://localhost:8080/")
+    await message.answer("Вы можете посетить сайт репортов по ссылке: https://amogus-reports.onrender.com/")
 
 # Обработка всех остальных сообщений
 # Изменяем обработчик, чтобы он отвечал только в приватных чатах
@@ -626,7 +626,7 @@ async def main():
     site = web.TCPSite(runner, '0.0.0.0', 8080)
     await site.start()
     
-    print("Веб-сервер запущен на http://localhost:8080")
+    print("Веб-сервер запущен на https://amogus-reports.onrender.com/")
     
     # Запускаем бота
     await dp.start_polling(bot)
