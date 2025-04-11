@@ -317,7 +317,7 @@ def setup_templates():
                     line-height: 1.6;
                     margin: 0;
                     padding: 20px;
-                    background-color: #f4f4f4;
+                    background: linear-gradient(135deg,#ff0000,#ff9900,#ff0000,#ff9900);
                 }
                 .container {
                     max-width: 800px;
