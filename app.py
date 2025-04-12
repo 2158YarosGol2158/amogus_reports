@@ -544,7 +544,9 @@ def setup_templates():
                     text-align: center;
                 }
                 h1 {
-                    color: linear-gradient(to bottom,#0004ff,#0059ff,#00ccff);
+                    background: linear-gradient(to bottom, #0004ff, #0059ff, #00ccff);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
                     margin-bottom: 20px;
                 }
                 .report-details {
@@ -553,8 +555,23 @@ def setup_templates():
                     padding: 20px;
                     border-radius: 5px;
                     margin: 20px 0;
-                    border-left: 4px solid linear-gradient(to bottom,#0004ff,#0059ff,#00ccff);
+                
                 }
+                .gradient-border {
+                    position: relative;
+                    padding-left: 8px;
+                }
+
+                .gradient-border::before {
+                    content: "";
+                    position: absolute;
+                    top: 0; left: 0;
+                    width: 4px;
+                    height: 100%;
+                    background: linear-gradient(to bottom, #0004ff, #0059ff, #00ccff);
+                }
+
+                
                 .btn {
                     display: inline-block;
                     background: linear-gradient(to bottom,#0004ff,#0059ff,#00ccff);
