@@ -13,6 +13,7 @@ from aiohttp import web
 from aiohttp.web import Request, Response
 import aiohttp_jinja2
 import jinja2
+import aiohttp
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -606,6 +607,19 @@ def setup_templates():
         </html>
         ''')
 
+async def keep_alive():
+    """Отправляет периодические запросы на сервер, чтобы предотвратить его засыпание."""
+    while True:
+        try:
+            async with aiohttp.ClientSession() as session:
+                await session.get("https://amogus-reports.onrender.com/")
+                logging.info("Отправлен пинг для поддержки активности")
+        except Exception as e:
+            logging.error(f"Ошибка поддержки активности: {e}")
+        
+        # Ждем 5 минут до следующего пинга
+        await asyncio.sleep(60)  # 300 секунд = 5 минут
+
 # Функция для запуска бота и веб-сервера
 async def main():
     # Настройка веб-маршрутов
@@ -630,7 +644,8 @@ async def main():
     await site.start()
     
     print("Веб-сервер запущен на https://amogus-reports.onrender.com/")
-    
+
+    asyncio.create_task(keep_alive())
     # Запускаем бота
     await dp.start_polling(bot)
 
