@@ -544,7 +544,7 @@ def setup_templates():
                     text-align: center;
                 }
                 h1 {
-                    background: linear-gradient(to bottom,#0004ff,#0059ff,#00ccff);
+                    text-color: linear-gradient(to bottom,#0004ff,#0059ff,#00ccff);
                     margin-bottom: 20px;
                 }
                 .report-details {
