@@ -544,7 +544,7 @@ def setup_templates():
                     text-align: center;
                 }
                 h1 {
-                    text-color: linear-gradient(to bottom,#0004ff,#0059ff,#00ccff);
+                    color: linear-gradient(to bottom,#0004ff,#0059ff,#00ccff);
                     margin-bottom: 20px;
                 }
                 .report-details {
@@ -553,7 +553,7 @@ def setup_templates():
                     padding: 20px;
                     border-radius: 5px;
                     margin: 20px 0;
-                    border-left: 4px solid #4CAF50;
+                    border-left: 4px solid linear-gradient(to bottom,#0004ff,#0059ff,#00ccff);
                 }
                 .btn {
                     display: inline-block;
