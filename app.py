@@ -598,7 +598,7 @@ def setup_templates():
             <div class="container">
                 <h1>Репорт успешно отправлен!</h1>
                 
-                <div class="report-details">
+                <div class="report-details" class="gradient-border">
                     <h2>Детали вашего репорта
                         {% if report.is_anonymous %}
                         <span class="anonymous-tag">Анонимно</span>
