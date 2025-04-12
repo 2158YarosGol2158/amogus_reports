@@ -361,7 +361,7 @@ def setup_templates():
                     font-weight: normal;
                 }
                 button {
-                    background: #4CAF50;
+                    background: linear-gradient(to bottom,#0004ff,#0059ff,#00ccff);
                     color: white;
                     border: none;
                     padding: 10px 15px;
@@ -369,7 +369,7 @@ def setup_templates():
                     cursor: pointer;
                 }
                 button:hover {
-                    background: #45a049;
+                    background: linear-gradient(to bottom,#000281,#003eb3,#0093b8);
                 }
                 .report {
                     background: #f9f9f9;
@@ -544,7 +544,7 @@ def setup_templates():
                     text-align: center;
                 }
                 h1 {
-                    color: #4CAF50;
+                    background: linear-gradient(to bottom,#0004ff,#0059ff,#00ccff);
                     margin-bottom: 20px;
                 }
                 .report-details {
@@ -557,7 +557,7 @@ def setup_templates():
                 }
                 .btn {
                     display: inline-block;
-                    background: #4CAF50;
+                    background: linear-gradient(to bottom,#0004ff,#0059ff,#00ccff);
                     color: white;
                     text-decoration: none;
                     padding: 10px 20px;
@@ -565,7 +565,7 @@ def setup_templates():
                     margin-top: 20px;
                 }
                 .btn:hover {
-                    background: #45a049;
+                    background: linear-gradient(to bottom,#000281,#003eb3,#0093b8);
                 }
                 .anonymous-tag {
                     background: #f0ad4e;
