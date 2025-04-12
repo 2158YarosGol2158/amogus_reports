@@ -375,7 +375,7 @@ def setup_templates():
                     background: #f9f9f9;
                     padding: 15px;
                     margin-bottom: 15px;
-                    border-left: 4px solid #4CAF50;
+                    border-left: 4px solid #293af2;
                 }
                 .report h3 {
                     margin-top: 0;
@@ -555,22 +555,8 @@ def setup_templates():
                     padding: 20px;
                     border-radius: 5px;
                     margin: 20px 0;
-                
+                    border-left: 4px solid #293af2;
                 }
-                .gradient-border {
-                    position: relative;
-                    padding-left: 8px;
-                }
-
-                .gradient-border::before {
-                    content: "";
-                    position: absolute;
-                    top: 0; left: 0;
-                    width: 4px;
-                    height: 100%;
-                    background: linear-gradient(to bottom, #0004ff, #0059ff, #00ccff);
-                }
-
                 
                 .btn {
                     display: inline-block;
