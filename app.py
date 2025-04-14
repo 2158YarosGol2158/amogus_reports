@@ -118,31 +118,64 @@ async def process_category(message: types.Message, state: FSMContext):
     await message.answer("Опишите проблему подробно:", reply_markup=ReplyKeyboardRemove())
     await state.set_state(ReportStates.waiting_for_description)
 
-# Обработка описания проблемы
 @dp.message(ReportStates.waiting_for_description)
 async def process_description(message: types.Message, state: FSMContext):
     await state.update_data(description=message.text)
     
-    buttons = [[KeyboardButton(text="Пропустить")]]
+    buttons = [
+        [KeyboardButton(text="Пропустить")]
+    ]
     keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
-    await message.answer("Отправьте доказательства (текст или ссылка на сообщение) или нажмите 'Пропустить':", 
+    await message.answer("Отправьте доказательства (фото, видео, документы или текст). "
+                         "Когда завершите отправку всех доказательств, напишите 'Готово'. "
+                         "Если у вас нет доказательств, нажмите 'Пропустить':", 
                          reply_markup=keyboard)
     await state.set_state(ReportStates.waiting_for_proof)
-
-
 
 # Модификация обработчика доказательств
 @dp.message(ReportStates.waiting_for_proof)
 async def process_proof(message: types.Message, state: FSMContext):
+    # Проверяем, закончил ли пользователь отправку доказательств
+    if message.text == "Готово":
+        buttons = [
+            [KeyboardButton(text="Да, отправить анонимно")],
+            [KeyboardButton(text="Нет, указать мои данные")]
+        ]
+        keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
+        await message.answer("Доказательства получены. Хотите отправить репорт анонимно?", reply_markup=keyboard)
+        await state.set_state(ReportStates.waiting_for_anonymity)
+        return
+    
+    # Проверяем, хочет ли пользователь пропустить отправку доказательств
+    if message.text == "Пропустить":
+        # Устанавливаем пустой список медиа
+        await state.update_data(proof="Не предоставлены", media_list=[])
+        
+        buttons = [
+            [KeyboardButton(text="Да, отправить анонимно")],
+            [KeyboardButton(text="Нет, указать мои данные")]
+        ]
+        keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
+        await message.answer("Хотите отправить репорт анонимно?", reply_markup=keyboard)
+        await state.set_state(ReportStates.waiting_for_anonymity)
+        return
+    
     data = await state.get_data()
-    media_list = []  # Список для хранения информации о медиафайлах
+    media_list = data.get('media_list', [])  # Список для хранения информации о медиафайлах
     
     # Обработка текста как доказательства или как подписи к медиа
     caption = ""
-    if message.text and message.text != "Пропустить":
+    if message.text:
         if not message.media_group_id:  # Если это просто текст без медиагруппы
             proof = message.text
-            await state.update_data(proof=proof, media_list=[])
+            media_list.append({
+                "type": "text",
+                "content": message.text,
+                "caption": "Текстовое доказательство"
+            })
+            await state.update_data(proof=proof, media_list=media_list)
+            await message.answer("Текстовое доказательство добавлено. Отправьте еще доказательства или напишите 'Готово', когда закончите.")
+            return
         else:
             caption = message.text  # Сохраняем подпись к медиа
     
@@ -164,10 +197,12 @@ async def process_proof(message: types.Message, state: FSMContext):
             "type": "photo",
             "file_id": file_id,
             "file_path": file_save_path,
-            "caption": caption if caption else "Без подписи"
+            "caption": caption if caption else "Фото без подписи"
         })
         
         proof = f"Фотография (сохранена как {file_name})"
+        await state.update_data(proof=proof, media_list=media_list)
+        await message.answer("Фото добавлено. Отправьте еще доказательства или напишите 'Готово', когда закончите.")
     
     # Обработка документа
     elif message.document:
@@ -185,10 +220,12 @@ async def process_proof(message: types.Message, state: FSMContext):
             "type": "document",
             "file_id": file_id,
             "file_path": file_save_path,
-            "caption": caption if caption else "Без подписи"
+            "caption": caption if caption else "Документ без подписи"
         })
         
         proof = f"Документ {file_name}"
+        await state.update_data(proof=proof, media_list=media_list)
+        await message.answer("Документ добавлен. Отправьте еще доказательства или напишите 'Готово', когда закончите.")
     
     # Обработка видео
     elif message.video:
@@ -208,10 +245,12 @@ async def process_proof(message: types.Message, state: FSMContext):
             "type": "video",
             "file_id": file_id,
             "file_path": file_save_path,
-            "caption": caption if caption else "Без подписи"
+            "caption": caption if caption else "Видео без подписи"
         })
         
         proof = f"Видео (сохранено как {file_name})"
+        await state.update_data(proof=proof, media_list=media_list)
+        await message.answer("Видео добавлено. Отправьте еще доказательства или напишите 'Готово', когда закончите.")
     
     # Обработка голосового сообщения
     elif message.voice:
@@ -231,52 +270,17 @@ async def process_proof(message: types.Message, state: FSMContext):
             "type": "voice",
             "file_id": file_id,
             "file_path": file_save_path,
-            "caption": caption if caption else "Без подписи"
+            "caption": caption if caption else "Голосовое сообщение без подписи"
         })
         
         proof = f"Голосовое сообщение (сохранено как {file_name})"
+        await state.update_data(proof=proof, media_list=media_list)
+        await message.answer("Голосовое сообщение добавлено. Отправьте еще доказательства или напишите 'Готово', когда закончите.")
     
-    # Если не было медиаконтента и текста
-    elif not message.text or message.text == "Пропустить":
-        proof = "Не предоставлены"
-        media_list = []
-    
-    # Обновляем данные состояния
-    current_media = data.get('media_list', [])
-    if media_list:
-        current_media.extend(media_list)
-    
-    await state.update_data(proof=proof, media_list=current_media)
-    
-    # Проверяем, есть ли медиагруппа и ожидаем все медиа из неё
-    if message.media_group_id:
-        # Если это часть медиагруппы, ожидаем некоторое время для получения всех медиа
-        # Не меняем состояние, чтобы получить все файлы из медиагруппы
-        await message.answer("Получено медиа. Отправьте остальные или напишите 'Готово', когда закончите.")
-        return
-    
-    # Если это не часть медиагруппы или получили все медиа, переходим к следующему шагу
-    buttons = [
-        [KeyboardButton(text="Да, отправить анонимно")],
-        [KeyboardButton(text="Нет, указать мои данные")]
-    ]
-    keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
-    await message.answer("Хотите отправить репорт анонимно?", reply_markup=keyboard)
-    await state.set_state(ReportStates.waiting_for_anonymity)
-
-# Добавим дополнительное состояние для завершения отправки медиа
-@dp.message(lambda message: message.text == "Готово" and message.chat.type == "private")
-async def finish_media_upload(message: types.Message, state: FSMContext):
-    current_state = await state.get_state()
-    
-    if current_state == ReportStates.waiting_for_proof.state:
-        buttons = [
-            [KeyboardButton(text="Да, отправить анонимно")],
-            [KeyboardButton(text="Нет, указать мои данные")]
-        ]
-        keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
-        await message.answer("Все медиафайлы получены. Хотите отправить репорт анонимно?", reply_markup=keyboard)
-        await state.set_state(ReportStates.waiting_for_anonymity)
+    else:
+        # Если сообщение не содержит ни один из поддерживаемых типов медиа
+        await message.answer("Я не распознал доказательство. Пожалуйста, отправьте фото, видео, документ, голосовое сообщение или текст. "
+                           "Напишите 'Готово', когда закончите, или 'Пропустить', если нет доказательств.")
 
 # Модификация отправки репорта
 @dp.message(ReportStates.waiting_for_anonymity)
@@ -290,7 +294,7 @@ async def process_anonymity(message: types.Message, state: FSMContext):
         "user_name": data["user_name"],
         "category": data["category"],
         "description": data["description"],
-        "proof": data["proof"],
+        "proof": data.get("proof", "Не предоставлены"),
         "is_anonymous": is_anonymous,
         "reporter_id": message.from_user.id if not is_anonymous else "Анонимно",
         "reporter_username": message.from_user.username if not is_anonymous else "Анонимно",
@@ -365,6 +369,12 @@ async def process_anonymity(message: types.Message, state: FSMContext):
                     caption=media["caption"],
                     message_thread_id=topic_id
                 )
+            elif media["type"] == "text":
+                await bot.send_message(
+                    chat_id=REPORTS_CHAT_ID,
+                    text=f"📄 Текстовое доказательство:\n\n{media['content']}",
+                    message_thread_id=topic_id
+                )
     else:
         # То же самое, но без указания топика
         await bot.send_message(
@@ -396,6 +406,11 @@ async def process_anonymity(message: types.Message, state: FSMContext):
                     chat_id=REPORTS_CHAT_ID,
                     voice=types.FSInputFile(media["file_path"]),
                     caption=media["caption"]
+                )
+            elif media["type"] == "text":
+                await bot.send_message(
+                    chat_id=REPORTS_CHAT_ID,
+                    text=f"📄 Текстовое доказательство:\n\n{media['content']}"
                 )
     
     await message.answer("✅ Ваш репорт успешно отправлен! Спасибо за обращение.", 
