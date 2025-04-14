@@ -17,6 +17,7 @@ import aiohttp
 import os
 from pathlib import Path
 import aiofiles
+from aiogram.types import FSInputFile
 
 os.makedirs('media', exist_ok=True)
 # Настройка логирования
