@@ -14,7 +14,11 @@ from aiohttp.web import Request, Response
 import aiohttp_jinja2
 import jinja2
 import aiohttp
+import os
+from pathlib import Path
+import aiofiles
 
+os.makedirs('media', exist_ok=True)
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 # Telegram Bot Token
@@ -125,23 +129,133 @@ async def process_description(message: types.Message, state: FSMContext):
                          reply_markup=keyboard)
     await state.set_state(ReportStates.waiting_for_proof)
 
-# Обработка доказательств
+
+
+# Модификация обработчика доказательств
 @dp.message(ReportStates.waiting_for_proof)
 async def process_proof(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    media_list = []  # Список для хранения информации о медиафайлах
+    
+    # Обработка текста как доказательства или как подписи к медиа
+    caption = ""
     if message.text and message.text != "Пропустить":
-        proof = message.text
-    elif message.photo:
-        photo_id = message.photo[-1].file_id
-        proof = f"Фото (file_id: {photo_id})"
+        if not message.media_group_id:  # Если это просто текст без медиагруппы
+            proof = message.text
+            await state.update_data(proof=proof, media_list=[])
+        else:
+            caption = message.text  # Сохраняем подпись к медиа
+    
+    # Обработка фото
+    if message.photo:
+        file_id = message.photo[-1].file_id
+        file = await bot.get_file(file_id)
+        file_path = file.file_path
+        
+        # Создаем уникальное имя файла
+        file_name = f"photo_{file_id.replace(':', '_').replace('-', '_')}.jpg"
+        file_save_path = f"media/{file_name}"
+        
+        # Скачиваем и сохраняем файл
+        await bot.download_file(file_path, file_save_path)
+        
+        # Добавляем информацию о файле в список
+        media_list.append({
+            "type": "photo",
+            "file_id": file_id,
+            "file_path": file_save_path,
+            "caption": caption if caption else "Без подписи"
+        })
+        
+        proof = f"Фотография (сохранена как {file_name})"
+    
+    # Обработка документа
     elif message.document:
-        doc_id = message.document.file_id
-        proof = f"Документ (file_id: {doc_id})"
-    else:
+        file_id = message.document.file_id
+        file_name = message.document.file_name or f"document_{file_id.replace(':', '_').replace('-', '_')}"
+        file = await bot.get_file(file_id)
+        file_path = file.file_path
+        
+        # Скачиваем и сохраняем файл
+        file_save_path = f"media/{file_name}"
+        await bot.download_file(file_path, file_save_path)
+        
+        # Добавляем информацию о файле в список
+        media_list.append({
+            "type": "document",
+            "file_id": file_id,
+            "file_path": file_save_path,
+            "caption": caption if caption else "Без подписи"
+        })
+        
+        proof = f"Документ {file_name}"
+    
+    # Обработка видео
+    elif message.video:
+        file_id = message.video.file_id
+        file = await bot.get_file(file_id)
+        file_path = file.file_path
+        
+        # Создаем уникальное имя файла
+        file_name = f"video_{file_id.replace(':', '_').replace('-', '_')}.mp4"
+        file_save_path = f"media/{file_name}"
+        
+        # Скачиваем и сохраняем файл
+        await bot.download_file(file_path, file_save_path)
+        
+        # Добавляем информацию о файле в список
+        media_list.append({
+            "type": "video",
+            "file_id": file_id,
+            "file_path": file_save_path,
+            "caption": caption if caption else "Без подписи"
+        })
+        
+        proof = f"Видео (сохранено как {file_name})"
+    
+    # Обработка голосового сообщения
+    elif message.voice:
+        file_id = message.voice.file_id
+        file = await bot.get_file(file_id)
+        file_path = file.file_path
+        
+        # Создаем уникальное имя файла
+        file_name = f"voice_{file_id.replace(':', '_').replace('-', '_')}.ogg"
+        file_save_path = f"media/{file_name}"
+        
+        # Скачиваем и сохраняем файл
+        await bot.download_file(file_path, file_save_path)
+        
+        # Добавляем информацию о файле в список
+        media_list.append({
+            "type": "voice",
+            "file_id": file_id,
+            "file_path": file_save_path,
+            "caption": caption if caption else "Без подписи"
+        })
+        
+        proof = f"Голосовое сообщение (сохранено как {file_name})"
+    
+    # Если не было медиаконтента и текста
+    elif not message.text or message.text == "Пропустить":
         proof = "Не предоставлены"
+        media_list = []
     
-    await state.update_data(proof=proof)
+    # Обновляем данные состояния
+    current_media = data.get('media_list', [])
+    if media_list:
+        current_media.extend(media_list)
     
-    # Добавляем выбор анонимности
+    await state.update_data(proof=proof, media_list=current_media)
+    
+    # Проверяем, есть ли медиагруппа и ожидаем все медиа из неё
+    if message.media_group_id:
+        # Если это часть медиагруппы, ожидаем некоторое время для получения всех медиа
+        # Не меняем состояние, чтобы получить все файлы из медиагруппы
+        await message.answer("Получено медиа. Отправьте остальные или напишите 'Готово', когда закончите.")
+        return
+    
+    # Если это не часть медиагруппы или получили все медиа, переходим к следующему шагу
     buttons = [
         [KeyboardButton(text="Да, отправить анонимно")],
         [KeyboardButton(text="Нет, указать мои данные")]
@@ -150,7 +264,21 @@ async def process_proof(message: types.Message, state: FSMContext):
     await message.answer("Хотите отправить репорт анонимно?", reply_markup=keyboard)
     await state.set_state(ReportStates.waiting_for_anonymity)
 
-# Обработка выбора анонимности
+# Добавим дополнительное состояние для завершения отправки медиа
+@dp.message(lambda message: message.text == "Готово" and message.chat.type == "private")
+async def finish_media_upload(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    
+    if current_state == ReportStates.waiting_for_proof.state:
+        buttons = [
+            [KeyboardButton(text="Да, отправить анонимно")],
+            [KeyboardButton(text="Нет, указать мои данные")]
+        ]
+        keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
+        await message.answer("Все медиафайлы получены. Хотите отправить репорт анонимно?", reply_markup=keyboard)
+        await state.set_state(ReportStates.waiting_for_anonymity)
+
+# Модификация отправки репорта
 @dp.message(ReportStates.waiting_for_anonymity)
 async def process_anonymity(message: types.Message, state: FSMContext):
     is_anonymous = message.text == "Да, отправить анонимно"
@@ -166,24 +294,24 @@ async def process_anonymity(message: types.Message, state: FSMContext):
         "is_anonymous": is_anonymous,
         "reporter_id": message.from_user.id if not is_anonymous else "Анонимно",
         "reporter_username": message.from_user.username if not is_anonymous else "Анонимно",
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "media_list": data.get("media_list", [])
     }
     
     # Добавляем репорт в список
     reports.append(report_data)
     
-    # Сохраняем в файл (опционально)
+    # Сохраняем в файл
     with open("reports.json", "w", encoding="utf-8") as f:
         json.dump(reports, f, ensure_ascii=False, indent=4)
     
-    # Отправляем репорт в чат с выбором топика
+    # Отправляем репорт в чат
     report_message = (
         f"📢 НОВЫЙ РЕПОРТ\n\n"
         f"👤 Тип: {report_data['report_type']}\n"
         f"🔖 Имя: {report_data['user_name']}\n"
         f"📌 Категория: {report_data['category']}\n"
         f"📝 Описание: {report_data['description']}\n\n"
-        f"🔍 Доказательства: {report_data['proof']}\n\n"
     )
     
     if is_anonymous:
@@ -193,21 +321,82 @@ async def process_anonymity(message: types.Message, state: FSMContext):
     
     report_message += f"📅 Дата: {report_data['date']}"
     
-    # Получаем ID топика для этого типа пользователя (админ или участник)
+    # Получаем ID топика для этого типа пользователя
     topic_id = TOPICS.get(report_data['report_type'], None)
     
-    # Отправляем сообщение в чат с указанием топика
+    # Отправляем сообщение и медиа в чат
+    media_files = data.get("media_list", [])
+    
     if topic_id:
+        # Сначала отправляем основное сообщение
         await bot.send_message(
             chat_id=REPORTS_CHAT_ID,
             text=report_message,
             message_thread_id=topic_id
         )
+        
+        # Затем отправляем все медиафайлы
+        for media in media_files:
+            if media["type"] == "photo":
+                await bot.send_photo(
+                    chat_id=REPORTS_CHAT_ID,
+                    photo=types.FSInputFile(media["file_path"]),
+                    caption=media["caption"],
+                    message_thread_id=topic_id
+                )
+            elif media["type"] == "document":
+                await bot.send_document(
+                    chat_id=REPORTS_CHAT_ID,
+                    document=types.FSInputFile(media["file_path"]),
+                    caption=media["caption"],
+                    message_thread_id=topic_id
+                )
+            elif media["type"] == "video":
+                await bot.send_video(
+                    chat_id=REPORTS_CHAT_ID,
+                    video=types.FSInputFile(media["file_path"]),
+                    caption=media["caption"],
+                    message_thread_id=topic_id
+                )
+            elif media["type"] == "voice":
+                await bot.send_voice(
+                    chat_id=REPORTS_CHAT_ID,
+                    voice=types.FSInputFile(media["file_path"]),
+                    caption=media["caption"],
+                    message_thread_id=topic_id
+                )
     else:
+        # То же самое, но без указания топика
         await bot.send_message(
             chat_id=REPORTS_CHAT_ID,
             text=report_message
         )
+        
+        for media in media_files:
+            if media["type"] == "photo":
+                await bot.send_photo(
+                    chat_id=REPORTS_CHAT_ID,
+                    photo=types.FSInputFile(media["file_path"]),
+                    caption=media["caption"]
+                )
+            elif media["type"] == "document":
+                await bot.send_document(
+                    chat_id=REPORTS_CHAT_ID,
+                    document=types.FSInputFile(media["file_path"]),
+                    caption=media["caption"]
+                )
+            elif media["type"] == "video":
+                await bot.send_video(
+                    chat_id=REPORTS_CHAT_ID,
+                    video=types.FSInputFile(media["file_path"]),
+                    caption=media["caption"]
+                )
+            elif media["type"] == "voice":
+                await bot.send_voice(
+                    chat_id=REPORTS_CHAT_ID,
+                    voice=types.FSInputFile(media["file_path"]),
+                    caption=media["caption"]
+                )
     
     await message.answer("✅ Ваш репорт успешно отправлен! Спасибо за обращение.", 
                          reply_markup=ReplyKeyboardRemove())
