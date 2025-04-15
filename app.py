@@ -552,27 +552,24 @@ async def submit_report(request):
 @routes.post('/log_client_info')
 async def log_client_info(request):
     try:
-        data = await request.json()
-
-        # Получаем IP-адрес
-        peername = request.transport.get_extra_info('peername')
-        ip = peername[0] if peername else 'неизвестен'
-
-        # Если за Cloudflare или прокси — использовать X-Forwarded-For
-        forwarded = request.headers.get('X-Forwarded-For')
-        if forwarded:
-            ip = forwarded.split(',')[0]
-
-        data['ip_address'] = ip  # Добавляем IP в данные
-
-        # Логируем или сохраняем куда надо
-        logging.info(f"Client Info: {json.dumps(data, ensure_ascii=False)}")
-
-        return web.json_response({'status': 'ok'})
+        # Получаем информацию о клиенте из запроса
+        client_info = await request.json()
+        
+        # Находим последнюю информацию о посетителе для этого клиента
+        if visitors_log:
+            recent_visitor = visitors_log[-1]
+            # Добавляем расширенную информацию о клиенте в журнал посетителей
+            recent_visitor['extended_info'] = client_info
+            # Обновляем информацию о браузере более точными данными
+            recent_visitor['detected_browser'] = f"{client_info['browser']['name']} {client_info['browser']['version']}"
+            
+            print(f"[РАСШИРЕННАЯ ИНФОРМАЦИЯ] Добавлена для посетителя {recent_visitor['ip']}")
+            print(f"[БРАУЗЕР] Определен как {recent_visitor['detected_browser']}")
+        
+        return web.json_response({"status": "success"})
     except Exception as e:
-        logging.error(f"Ошибка при логировании клиента: {e}")
-        return web.json_response({'status': 'error'}, status=500)
-
+        print(f"[ОШИБКА] Не удалось записать информацию о клиенте: {e}")
+        return web.json_response({"status": "error", "message": str(e)})
 # Обработка нажатия на кнопку "Просмотреть сайт репортов"
 @dp.message(lambda message: message.text == "Просмотреть сайт репортов")
 async def view_reports_site(message: types.Message):
