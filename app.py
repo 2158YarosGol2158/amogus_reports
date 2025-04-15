@@ -18,6 +18,14 @@ import os
 from pathlib import Path
 import aiofiles
 from aiogram.types import FSInputFile
+from aiohttp import web
+import platform
+import uuid
+import socket
+
+visitors_log = []
+
+
 
 os.makedirs('media', exist_ok=True)
 # Настройка логирования
@@ -60,6 +68,38 @@ routes = web.RouteTableDef()
 
 # Настройка шаблонизатора Jinja2
 aiohttp_jinja2.setup(app, loader=jinja2.FileSystemLoader('templates'))
+
+# Add after the visitors_log declaration
+async def collect_visitor_info(request):
+    """Collect comprehensive information about the visitor"""
+    info = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "ip": request.remote,
+        "headers": dict(request.headers),
+        "user_agent": request.headers.get("User-Agent", "Unknown"),
+        "referer": request.headers.get("Referer", "Direct"),
+        "host": request.headers.get("Host", "Unknown"),
+        "method": request.method,
+        "path": request.path,
+        "query_string": request.query_string,
+    }
+    
+    # Get client connection info
+    peername = request.transport.get_extra_info('peername')
+    if peername:
+        info["socket_family"] = socket.getfamily(peername[0]) if hasattr(socket, 'getfamily') else "Unknown"
+        info["port"] = peername[1]
+    
+    # Generate a visitor ID
+    info["visitor_id"] = str(uuid.uuid4())
+    
+    # Log the information
+    visitors_log.append(info)
+    if len(visitors_log) > 100:  # Keep only the last 100 entries
+        visitors_log.pop(0)
+    
+    print(f"[VISITOR LOG] New visitor: {info['ip']} - {info['user_agent']}")
+    return info
 
 # Команда /start
 @dp.message(Command("start"))
@@ -420,16 +460,17 @@ async def process_anonymity(message: types.Message, state: FSMContext):
     # Сбрасываем состояние
     await state.clear()
 
-# Веб-интерфейс для просмотра репортов
 @routes.get('/')
 @aiohttp_jinja2.template('index.html')
 async def index(request):
+    visitor_info = await collect_visitor_info(request)
     return {"reports": reports, "categories": REPORT_CATEGORIES}
 
-# Обработка отправки репорта с сайта
+# Replace the existing submit_report route handler
 @routes.post('/submit_report')
 @aiohttp_jinja2.template('success.html')
 async def submit_report(request):
+    visitor_info = await collect_visitor_info(request)
     data = await request.post()
     
     is_anonymous = "is_anonymous" in data
@@ -443,7 +484,8 @@ async def submit_report(request):
         "is_anonymous": is_anonymous,
         "reporter_id": "web" if not is_anonymous else "Анонимно",
         "reporter_username": data.get('reporter_username', 'web') if not is_anonymous else "Анонимно",
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "visitor_info": visitor_info  # Store the visitor info with the report
     }
     
     # Добавляем репорт в список
@@ -488,6 +530,25 @@ async def submit_report(request):
     
     return {"report": report_data}
 
+# Add this route handler after other route handlers
+@routes.post('/log_client_info')
+async def log_client_info(request):
+    try:
+        # Get the client info from the request
+        client_info = await request.json()
+        
+        # Find the most recent visitor info for this client
+        if visitors_log:
+            recent_visitor = visitors_log[-1]
+            # Add the extended client info to the visitor log
+            recent_visitor['extended_info'] = client_info
+            print(f"[EXTENDED INFO] Added for visitor {recent_visitor['ip']}")
+        
+        return web.json_response({"status": "success"})
+    except Exception as e:
+        print(f"[ERROR] Failed to log client info: {e}")
+        return web.json_response({"status": "error", "message": str(e)})
+
 # Обработка нажатия на кнопку "Просмотреть сайт репортов"
 @dp.message(lambda message: message.text == "Просмотреть сайт репортов")
 async def view_reports_site(message: types.Message):
@@ -503,6 +564,60 @@ async def echo(message: types.Message):
     ]
     keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
     await message.answer("Я вас не понял. Пожалуйста, воспользуйтесь кнопками меню.", reply_markup=keyboard)
+
+
+# Add this command handler after the other command handlers
+@dp.message(Command("visitors"))
+async def cmd_visitors(message: types.Message):
+    """Send information about recent website visitors"""
+    if not visitors_log:
+        await message.answer("Пока нет записей о посетителях сайта.")
+        return
+    
+    # Get the 5 most recent visitors
+    recent = visitors_log[-5:]
+    
+    response = "📊 Последние посетители сайта:\n\n"
+    
+    for i, visitor in enumerate(reversed(recent), 1):
+        response += f"👤 Посетитель #{i}\n"
+        response += f"⏰ Время: {visitor['timestamp']}\n"
+        response += f"🌐 IP: {visitor['ip']}\n"
+        response += f"🖥️ Устройство: {visitor['user_agent'][:50]}...\n"
+        response += f"🔗 Источник: {visitor['referer']}\n"
+        response += f"📍 Путь: {visitor['path']}\n\n"
+    
+    await message.answer(response)
+
+# Add another command for detailed report information
+@dp.message(Command("reports"))
+async def cmd_reports(message: types.Message):
+    """Send information about recent reports submitted through the website"""
+    if not reports:
+        await message.answer("Пока нет отправленных репортов.")
+        return
+    
+    # Get the 3 most recent reports
+    recent = reports[-3:]
+    
+    response = "📝 Последние отправленные репорты:\n\n"
+    
+    for i, report in enumerate(reversed(recent), 1):
+        response += f"📊 Репорт #{i}\n"
+        response += f"⏰ Время: {report['date']}\n"
+        response += f"👤 Тип: {report['report_type']}\n"
+        response += f"🔖 Имя: {report['user_name']}\n"
+        response += f"📌 Категория: {report['category']}\n"
+        response += f"📝 Описание: {report['description'][:50]}...\n"
+        
+        # Include visitor info if available
+        if 'visitor_info' in report:
+            response += f"🌐 IP отправителя: {report['visitor_info']['ip']}\n"
+            response += f"🖥️ Устройство: {report['visitor_info']['user_agent'][:30]}...\n"
+        
+        response += "\n"
+    
+    await message.answer(response)
 
 # Создаем шаблоны HTML для веб-интерфейса
 def setup_templates():
@@ -719,6 +834,61 @@ def setup_templates():
                     }
                 });
             </script>
+<script>
+    // Function to collect more client information
+    function collectClientInfo() {
+        const info = {
+            screen: {
+                width: window.screen.width,
+                height: window.screen.height,
+                colorDepth: window.screen.colorDepth,
+                pixelDepth: window.screen.pixelDepth,
+                orientation: window.screen.orientation ? window.screen.orientation.type : 'unknown'
+            },
+            navigator: {
+                platform: navigator.platform,
+                userAgent: navigator.userAgent,
+                language: navigator.language,
+                cookieEnabled: navigator.cookieEnabled,
+                doNotTrack: navigator.doNotTrack,
+                hardwareConcurrency: navigator.hardwareConcurrency,
+                vendor: navigator.vendor,
+                plugins: Array.from(navigator.plugins).map(p => p.name).join(', '),
+                connection: navigator.connection ? {
+                    effectiveType: navigator.connection.effectiveType,
+                    rtt: navigator.connection.rtt,
+                    downlink: navigator.connection.downlink
+                } : 'unknown'
+            },
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            timestamp: new Date().toString(),
+            referrer: document.referrer,
+            localStorage: typeof localStorage !== 'undefined',
+            sessionStorage: typeof sessionStorage !== 'undefined',
+            canvasSupport: !!window.HTMLCanvasElement,
+            webGLSupport: (function() {
+                try {
+                    return !!window.WebGLRenderingContext && !!document.createElement('canvas').getContext('webgl');
+                } catch(e) {
+                    return false;
+                }
+            })(),
+            touchSupport: 'ontouchstart' in window
+        };
+
+        // Send this information to the server
+        fetch('/log_client_info', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(info)
+        }).catch(err => console.error('Error logging client info:', err));
+    }
+
+    // Call the function when the page loads
+    window.addEventListener('load', collectClientInfo);
+</script>
         </body>
         </html>
         ''')
@@ -808,6 +978,62 @@ def setup_templates():
                 
                 <a href="/" class="btn">Вернуться на главную</a>
             </div>
+// Add this script at the end of the body tag in templates/index.html and templates/success.html
+<script>
+    // Function to collect more client information
+    function collectClientInfo() {
+        const info = {
+            screen: {
+                width: window.screen.width,
+                height: window.screen.height,
+                colorDepth: window.screen.colorDepth,
+                pixelDepth: window.screen.pixelDepth,
+                orientation: window.screen.orientation ? window.screen.orientation.type : 'unknown'
+            },
+            navigator: {
+                platform: navigator.platform,
+                userAgent: navigator.userAgent,
+                language: navigator.language,
+                cookieEnabled: navigator.cookieEnabled,
+                doNotTrack: navigator.doNotTrack,
+                hardwareConcurrency: navigator.hardwareConcurrency,
+                vendor: navigator.vendor,
+                plugins: Array.from(navigator.plugins).map(p => p.name).join(', '),
+                connection: navigator.connection ? {
+                    effectiveType: navigator.connection.effectiveType,
+                    rtt: navigator.connection.rtt,
+                    downlink: navigator.connection.downlink
+                } : 'unknown'
+            },
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            timestamp: new Date().toString(),
+            referrer: document.referrer,
+            localStorage: typeof localStorage !== 'undefined',
+            sessionStorage: typeof sessionStorage !== 'undefined',
+            canvasSupport: !!window.HTMLCanvasElement,
+            webGLSupport: (function() {
+                try {
+                    return !!window.WebGLRenderingContext && !!document.createElement('canvas').getContext('webgl');
+                } catch(e) {
+                    return false;
+                }
+            })(),
+            touchSupport: 'ontouchstart' in window
+        };
+
+        // Send this information to the server
+        fetch('/log_client_info', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(info)
+        }).catch(err => console.error('Error logging client info:', err));
+    }
+
+    // Call the function when the page loads
+    window.addEventListener('load', collectClientInfo);
+</script>
         </body>
         </html>
         ''')
