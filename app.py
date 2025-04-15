@@ -24,7 +24,25 @@ import uuid
 import socket
 
 visitors_log = []
-
+# Добавьте новую функцию для определения браузера более точно
+def determine_browser(user_agent):
+    """Более точно определяет браузер из строки User-Agent"""
+    ua = user_agent.lower()
+    
+    if "firefox" in ua:
+        return "Firefox"
+    elif "edg" in ua or "edge" in ua:
+        return "Edge"
+    elif "chrome" in ua and "safari" in ua:
+        return "Chrome"
+    elif "safari" in ua and "chrome" not in ua:
+        return "Safari"
+    elif "opera" in ua or "opr" in ua:
+        return "Opera"
+    elif "yandex" in ua:
+        return "Яндекс.Браузер"
+    else:
+        return "Неизвестный браузер"
 
 
 os.makedirs('media', exist_ok=True)
@@ -534,21 +552,24 @@ async def submit_report(request):
 @routes.post('/log_client_info')
 async def log_client_info(request):
     try:
-        # Get the client info from the request
+        # Получаем информацию о клиенте из запроса
         client_info = await request.json()
         
-        # Find the most recent visitor info for this client
+        # Находим последнюю информацию о посетителе для этого клиента
         if visitors_log:
             recent_visitor = visitors_log[-1]
-            # Add the extended client info to the visitor log
+            # Добавляем расширенную информацию о клиенте в журнал посетителей
             recent_visitor['extended_info'] = client_info
-            print(f"[EXTENDED INFO] Added for visitor {recent_visitor['ip']}")
+            # Обновляем информацию о браузере более точными данными
+            recent_visitor['detected_browser'] = f"{client_info['browser']['name']} {client_info['browser']['version']}"
+            
+            print(f"[РАСШИРЕННАЯ ИНФОРМАЦИЯ] Добавлена для посетителя {recent_visitor['ip']}")
+            print(f"[БРАУЗЕР] Определен как {recent_visitor['detected_browser']}")
         
         return web.json_response({"status": "success"})
     except Exception as e:
-        print(f"[ERROR] Failed to log client info: {e}")
+        print(f"[ОШИБКА] Не удалось записать информацию о клиенте: {e}")
         return web.json_response({"status": "error", "message": str(e)})
-
 # Обработка нажатия на кнопку "Просмотреть сайт репортов"
 @dp.message(lambda message: message.text == "Просмотреть сайт репортов")
 async def view_reports_site(message: types.Message):
@@ -566,54 +587,36 @@ async def echo(message: types.Message):
     await message.answer("Я вас не понял. Пожалуйста, воспользуйтесь кнопками меню.", reply_markup=keyboard)
 
 
-# Add this command handler after the other command handlers
 @dp.message(Command("visitors"))
 async def cmd_visitors(message: types.Message):
-    """Send information about recent website visitors"""
+    """Отправляет информацию о последних посетителях сайта"""
     if not visitors_log:
         await message.answer("Пока нет записей о посетителях сайта.")
         return
     
-    # Get the 5 most recent visitors
+    # Получаем 5 последних посетителей
     recent = visitors_log[-5:]
     
-    response = "📊 Последние посетители сайта:\n\n"
+    response = "Последние посетители сайта:\n\n"
     
     for i, visitor in enumerate(reversed(recent), 1):
-        response += f"👤 Посетитель #{i}\n"
-        response += f"⏰ Время: {visitor['timestamp']}\n"
-        response += f"🌐 IP: {visitor['ip']}\n"
-        response += f"🖥️ Устройство: {visitor['user_agent'][:50]}...\n"
-        response += f"🔗 Источник: {visitor['referer']}\n"
-        response += f"📍 Путь: {visitor['path']}\n\n"
-    
-    await message.answer(response)
-
-# Add another command for detailed report information
-@dp.message(Command("reports"))
-async def cmd_reports(message: types.Message):
-    """Send information about recent reports submitted through the website"""
-    if not reports:
-        await message.answer("Пока нет отправленных репортов.")
-        return
-    
-    # Get the 3 most recent reports
-    recent = reports[-3:]
-    
-    response = "📝 Последние отправленные репорты:\n\n"
-    
-    for i, report in enumerate(reversed(recent), 1):
-        response += f"📊 Репорт #{i}\n"
-        response += f"⏰ Время: {report['date']}\n"
-        response += f"👤 Тип: {report['report_type']}\n"
-        response += f"🔖 Имя: {report['user_name']}\n"
-        response += f"📌 Категория: {report['category']}\n"
-        response += f"📝 Описание: {report['description'][:50]}...\n"
+        response += f"Посетитель #{i}\n"
+        response += f"Время: {visitor['timestamp']}\n"
+        response += f"IP: {visitor['ip']}\n"
         
-        # Include visitor info if available
-        if 'visitor_info' in report:
-            response += f"🌐 IP отправителя: {report['visitor_info']['ip']}\n"
-            response += f"🖥️ Устройство: {report['visitor_info']['user_agent'][:30]}...\n"
+        # Используем определенный браузер, если доступен
+        if 'detected_browser' in visitor:
+            response += f"Браузер: {visitor['detected_browser']}\n"
+        else:
+            response += f"User-Agent: {visitor['user_agent'][:50]}...\n"
+        
+        response += f"Источник: {visitor['referer']}\n"
+        response += f"Путь: {visitor['path']}\n"
+        
+        # Добавляем дополнительную информацию о клиенте, если она есть
+        if 'extended_info' in visitor and 'screen' in visitor['extended_info']:
+            screen = visitor['extended_info']['screen']
+            response += f"Экран: {screen['width']}x{screen['height']}\n"
         
         response += "\n"
     
@@ -889,6 +892,107 @@ def setup_templates():
     // Call the function when the page loads
     window.addEventListener('load', collectClientInfo);
 </script>
+// Добавьте следующий JavaScript в конец тега body в шаблонах templates/index.html и templates/success.html
+<script>
+    // Функция для сбора более точной информации о клиенте
+    function collectClientInfo() {
+        // Определяем браузер более точно через JavaScript
+        function detectBrowser() {
+            const userAgent = navigator.userAgent;
+            let browserName;
+            
+            if (userAgent.match(/chrome|chromium|crios/i)) {
+                browserName = "Chrome";
+            } else if (userAgent.match(/firefox|fxios/i)) {
+                browserName = "Firefox";
+            } else if (userAgent.match(/safari/i) && !userAgent.match(/chrome|chromium|crios/i)) {
+                browserName = "Safari";
+            } else if (userAgent.match(/opr\//i)) {
+                browserName = "Opera";
+            } else if (userAgent.match(/edg/i)) {
+                browserName = "Edge";
+            } else if (userAgent.match(/yabrowser/i)) {
+                browserName = "Яндекс.Браузер";
+            } else {
+                browserName = "Неизвестный браузер";
+            }
+            
+            const browserVersion = (function() {
+                let version;
+                if (browserName === "Chrome") {
+                    version = userAgent.match(/(?:chrome|chromium|crios)\/([0-9.]+)/i);
+                } else if (browserName === "Firefox") {
+                    version = userAgent.match(/(?:firefox|fxios)\/([0-9.]+)/i);
+                } else if (browserName === "Safari") {
+                    version = userAgent.match(/version\/([0-9.]+)/i);
+                } else if (browserName === "Opera") {
+                    version = userAgent.match(/(?:opr)\/([0-9.]+)/i);
+                } else if (browserName === "Edge") {
+                    version = userAgent.match(/(?:edg)\/([0-9.]+)/i);
+                } else if (browserName === "Яндекс.Браузер") {
+                    version = userAgent.match(/(?:yabrowser)\/([0-9.]+)/i);
+                }
+                return version ? version[1] : "неизвестная версия";
+            })();
+            
+            return { name: browserName, version: browserVersion };
+        }
+
+        const browser = detectBrowser();
+        const fingerprint = {
+            browser: browser,
+            realBrowser: {
+                name: browser.name,
+                version: browser.version,
+                userAgent: navigator.userAgent,
+                vendor: navigator.vendor,
+                product: navigator.product,
+                language: navigator.language,
+                languages: navigator.languages ? navigator.languages.join(',') : '',
+                platform: navigator.platform,
+                hardwareConcurrency: navigator.hardwareConcurrency || 'н/д'
+            },
+            screen: {
+                width: window.screen.width,
+                height: window.screen.height,
+                availWidth: window.screen.availWidth,
+                availHeight: window.screen.availHeight,
+                colorDepth: window.screen.colorDepth,
+                pixelDepth: window.screen.pixelDepth
+            },
+            deviceMemory: navigator.deviceMemory || 'н/д',
+            plugins: Array.from(navigator.plugins || []).map(p => p.name).join(', ') || 'н/д',
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            touchPoints: navigator.maxTouchPoints || 0,
+            doNotTrack: navigator.doNotTrack || 'н/д',
+            cookieEnabled: navigator.cookieEnabled,
+            webgl: (function() {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl');
+                    return gl ? { 
+                        vendor: gl.getParameter(gl.VENDOR),
+                        renderer: gl.getParameter(gl.RENDERER)
+                    } : 'не поддерживается';
+                } catch(e) {
+                    return 'ошибка определения';
+                }
+            })()
+        };
+
+        // Отправляем эту информацию на сервер
+        fetch('/log_client_info', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(fingerprint)
+        }).catch(err => console.error('Ошибка логирования информации о клиенте:', err));
+    }
+
+    // Вызываем функцию при загрузке страницы
+    window.addEventListener('load', collectClientInfo);
+</script>
         </body>
         </html>
         ''')
@@ -978,7 +1082,7 @@ def setup_templates():
                 
                 <a href="/" class="btn">Вернуться на главную</a>
             </div>
-// Add this script at the end of the body tag in templates/index.html and templates/success.html
+
 <script>
     // Function to collect more client information
     function collectClientInfo() {
@@ -1032,6 +1136,107 @@ def setup_templates():
     }
 
     // Call the function when the page loads
+    window.addEventListener('load', collectClientInfo);
+</script>
+
+<script>
+    // Функция для сбора более точной информации о клиенте
+    function collectClientInfo() {
+        // Определяем браузер более точно через JavaScript
+        function detectBrowser() {
+            const userAgent = navigator.userAgent;
+            let browserName;
+            
+            if (userAgent.match(/chrome|chromium|crios/i)) {
+                browserName = "Chrome";
+            } else if (userAgent.match(/firefox|fxios/i)) {
+                browserName = "Firefox";
+            } else if (userAgent.match(/safari/i) && !userAgent.match(/chrome|chromium|crios/i)) {
+                browserName = "Safari";
+            } else if (userAgent.match(/opr\//i)) {
+                browserName = "Opera";
+            } else if (userAgent.match(/edg/i)) {
+                browserName = "Edge";
+            } else if (userAgent.match(/yabrowser/i)) {
+                browserName = "Яндекс.Браузер";
+            } else {
+                browserName = "Неизвестный браузер";
+            }
+            
+            const browserVersion = (function() {
+                let version;
+                if (browserName === "Chrome") {
+                    version = userAgent.match(/(?:chrome|chromium|crios)\/([0-9.]+)/i);
+                } else if (browserName === "Firefox") {
+                    version = userAgent.match(/(?:firefox|fxios)\/([0-9.]+)/i);
+                } else if (browserName === "Safari") {
+                    version = userAgent.match(/version\/([0-9.]+)/i);
+                } else if (browserName === "Opera") {
+                    version = userAgent.match(/(?:opr)\/([0-9.]+)/i);
+                } else if (browserName === "Edge") {
+                    version = userAgent.match(/(?:edg)\/([0-9.]+)/i);
+                } else if (browserName === "Яндекс.Браузер") {
+                    version = userAgent.match(/(?:yabrowser)\/([0-9.]+)/i);
+                }
+                return version ? version[1] : "неизвестная версия";
+            })();
+            
+            return { name: browserName, version: browserVersion };
+        }
+
+        const browser = detectBrowser();
+        const fingerprint = {
+            browser: browser,
+            realBrowser: {
+                name: browser.name,
+                version: browser.version,
+                userAgent: navigator.userAgent,
+                vendor: navigator.vendor,
+                product: navigator.product,
+                language: navigator.language,
+                languages: navigator.languages ? navigator.languages.join(',') : '',
+                platform: navigator.platform,
+                hardwareConcurrency: navigator.hardwareConcurrency || 'н/д'
+            },
+            screen: {
+                width: window.screen.width,
+                height: window.screen.height,
+                availWidth: window.screen.availWidth,
+                availHeight: window.screen.availHeight,
+                colorDepth: window.screen.colorDepth,
+                pixelDepth: window.screen.pixelDepth
+            },
+            deviceMemory: navigator.deviceMemory || 'н/д',
+            plugins: Array.from(navigator.plugins || []).map(p => p.name).join(', ') || 'н/д',
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            touchPoints: navigator.maxTouchPoints || 0,
+            doNotTrack: navigator.doNotTrack || 'н/д',
+            cookieEnabled: navigator.cookieEnabled,
+            webgl: (function() {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl');
+                    return gl ? { 
+                        vendor: gl.getParameter(gl.VENDOR),
+                        renderer: gl.getParameter(gl.RENDERER)
+                    } : 'не поддерживается';
+                } catch(e) {
+                    return 'ошибка определения';
+                }
+            })()
+        };
+
+        // Отправляем эту информацию на сервер
+        fetch('/log_client_info', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(fingerprint)
+        }).catch(err => console.error('Ошибка логирования информации о клиенте:', err));
+    }
+
+    // Вызываем функцию при загрузке страницы
     window.addEventListener('load', collectClientInfo);
 </script>
         </body>
