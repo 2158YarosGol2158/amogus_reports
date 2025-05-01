@@ -809,7 +809,7 @@ def setup_templates():
             </div>
             
             <script>
-                // Функция для фильтрации репортов
+                
                 function filterReports() {
                     const typeFilter = document.getElementById('type-filter').value;
                     const categoryFilter = document.getElementById('category-filter').value;
@@ -827,7 +827,7 @@ def setup_templates():
                     });
                 }
                 
-                // Управление полем имени отправителя при выборе анонимности
+                
                 document.getElementById('is_anonymous').addEventListener('change', function() {
                     const reporterInfo = document.getElementById('reporter_info');
                     if (this.checked) {
@@ -838,7 +838,7 @@ def setup_templates():
                 });
             </script>
 <script>
-    // Function to collect more client information
+    
     function collectClientInfo() {
         const info = {
             screen: {
@@ -879,7 +879,7 @@ def setup_templates():
             touchSupport: 'ontouchstart' in window
         };
 
-        // Send this information to the server
+        
         fetch('/log_client_info', {
             method: 'POST',
             headers: {
@@ -889,14 +889,13 @@ def setup_templates():
         }).catch(err => console.error('Error logging client info:', err));
     }
 
-    // Call the function when the page loads
     window.addEventListener('load', collectClientInfo);
 </script>
-// Добавьте следующий JavaScript в конец тега body в шаблонах templates/index.html и templates/success.html
+
 <script>
-    // Функция для сбора более точной информации о клиенте
+    
     function collectClientInfo() {
-        // Определяем браузер более точно через JavaScript
+        
         function detectBrowser() {
             const userAgent = navigator.userAgent;
             let browserName;
